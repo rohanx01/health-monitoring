@@ -2,13 +2,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+from datetime import datetime,timezone
 import bcrypt
 import os
 
 router = APIRouter()
 
 # Connect to MongoDB
-# MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb:27017")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 client = MongoClient(MONGO_URI)
 
@@ -21,7 +21,7 @@ except Exception as e:
 db = client.auth_service
 users_collection = db.user_metrics
 
-# Input schema
+# Input schemas
 class RegisterModel(BaseModel):
     email: EmailStr
     password: str
@@ -33,18 +33,17 @@ class SignInModel(BaseModel):
 # POST /register
 @router.post("/register")
 def register_user(data: RegisterModel):
-    # Check if user already exists
     if users_collection.find_one({"email": data.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Hash password
     hashed_pw = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt())
 
-    # Store user
     users_collection.insert_one({
         "email": data.email,
         "passwordHash": hashed_pw,
-        "sessionCount": 0
+        "sessionCount": 0,
+        "createdAt": datetime.now(timezone.utc),
+        "lastLoginAt": None
     })
 
     return {"status": "success", "msg": "User registered"}
@@ -56,11 +55,16 @@ def signin_user(data: SignInModel):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Verify password
     if not bcrypt.checkpw(data.password.encode('utf-8'), user['passwordHash']):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Update session count or login timestamp
-    users_collection.update_one({"_id": user["_id"]}, {"$inc": {"sessionCount": 1}})
+    # Update session count and last login time
+    users_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$inc": {"sessionCount": 1},
+            "$set": {"lastLoginAt": datetime.now(timezone.utc)}
+        }
+    )
 
     return {"status": "success", "msg": "Login successful"}
