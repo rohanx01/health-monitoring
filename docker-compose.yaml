@@ -1,14 +1,46 @@
+version: "3.9"
 services:
-  # mongodb:
-  #     image: mongo
-  #     container_name: mongo
-  #     ports:
-  #       - "27017:27017"
-  #     volumes:
-  #       - mongo_data:/data/db
+
+  # ======================
+  # Main App: Auth Service
+  # ======================
   auth_service:
     build: ./services/auth_service
     ports:
       - "8001:8000"
+      - "8002:8002"   # Prometheus metrics server ✅
     environment:
-      - MONGO_URI=mongodb+srv://rohankumar6143:143rohan@cluster0.57rhuig.mongodb.net/
+      - MONGO_URI=mongodb://host.docker.internal:27017
+
+  # =====================
+  # Prometheus Monitoring
+  # =====================
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - auth_service
+
+  # ===========================
+  # Monitoring API (Flask/FastAPI)
+  # ===========================
+  # monitoring_api:
+  #   build: ./monitoring_app/backend
+  #   ports:
+  #     - "7000:7000"
+  #   depends_on:
+  #     - prometheus
+
+  # =====================
+  # Monitoring Dashboard
+  # # =====================
+  # monitoring_ui:
+  #   build: ./monitoring_app/frontend
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - monitoring_api

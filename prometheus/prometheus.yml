@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'auth_service'
+    static_configs:
+      - targets: ['auth_service:8002']
+        labels:
+          service: 'auth'
+
+  # Add more services here

@@ -4,3 +4,5 @@ pymongo
 bcrypt
 python-dotenv
 email-validator
+prometheus-client
+psutil
