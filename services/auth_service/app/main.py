@@ -16,5 +16,5 @@ start_metrics_server()
 
 # Optional health check
 @app.get("/ping")
-def ping():
+async def ping():
     return {"message": "auth service is alive"}
