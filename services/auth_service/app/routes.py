@@ -10,7 +10,7 @@ import asyncio
 router = APIRouter()
 
 # Connect to MongoDB
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI")
 client = AsyncIOMotorClient(MONGO_URI)
 db = client.auth_service
 users_collection = db.user_metrics

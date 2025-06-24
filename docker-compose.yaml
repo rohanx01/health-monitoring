@@ -1,16 +1,30 @@
-version: "3.9"
 services:
-
-  # ======================
-  # Main App: Auth Service
-  # ======================
+  mongodb:
+    image: mongo
+    container_name: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: secret
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - private_net  # ✅ Reference global network
+    ports:
+      - "27017:27017"  # ✅ Enables access from your host for Compass
+  
   auth_service:
     build: ./services/auth_service
+    container_name: auth_service
+    depends_on:
+      - mongodb
     ports:
-      - "8001:8000"
-      - "8002:8002"   # Prometheus metrics server ✅
+      - "8000:8000"
+      - "8002:8002" # prometheus server's port
     environment:
-      - MONGO_URI=mongodb://host.docker.internal:27017
+      - MONGO_URI=mongodb://admin:secret@mongodb:27017
+    networks:
+      - private_net  # ✅ Same network for internal DNS
 
   # =====================
   # Prometheus Monitoring
@@ -44,3 +58,10 @@ services:
   #     - "3000:3000"
   #   depends_on:
   #     - monitoring_api
+
+volumes:
+  mongo_data:
+  
+networks:
+  private_net:  # ✅ Declare the actual network here
+    driver: bridge
