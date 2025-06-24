@@ -10,10 +10,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %
 # --- Configuration ---
 # Define the base URLs for our running services.
 # Make sure these ports match what you defined in Step 1.
-AUTH_SERVICE_URL = "http://localhost:8000"
-ORDER_SERVICE_URL = "http://localhost:8001"
-PRODUCT_SERVICE_URL = "http://localhost:8002"
-
+# AUTH_SERVICE_URL = "http://localhost:8000"
+# ORDER_SERVICE_URL = "http://localhost:8001"
+# PRODUCT_SERVICE_URL = "http://localhost:8002"
+AUTH_SERVICE_URL = "http://auth-service:8000"
+ORDER_SERVICE_URL = "http://order-service:8001"
+PRODUCT_SERVICE_URL = "http://product-service:8002"
 # --- User Scenarios ---
 # We define different functions to simulate different user behaviors.
 

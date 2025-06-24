@@ -5,7 +5,8 @@ from fastapi import FastAPI, Request, HTTPException
 import uvicorn
 from loguru import logger
 import psutil
-
+import asyncio
+import sys
 # --- Configuration ---
 # Define the port for this service. Each service will have a unique port.
 PORT = 8000
@@ -20,14 +21,21 @@ os.makedirs("logs", exist_ok=True)
 
 # Remove default logger and add a new one
 logger.remove()
+os.makedirs("logs", exist_ok=True)
 logger.add(
-    f"logs/{SERVICE_NAME}.log",  # Log file path
-    serialize=True,             # This is the magic! It formats logs as JSON.
-    level="INFO",               # Minimum level to log
-    rotation="10 MB",           # Rotate file when it reaches 10 MB
-    retention="7 days"          # Keep logs for 7 days
+    f"logs/{SERVICE_NAME}.log",
+    serialize=True,
+    level="INFO",
+    rotation="10 MB",
+    retention="7 days"
 )
 
+# ALSO log to the console for live Docker logs
+logger.add(
+    sys.stdout,
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+)
 # --- FastAPI App Initialization ---
 app = FastAPI()
 
@@ -86,7 +94,7 @@ async def log_middleware(request: Request, call_next):
 @app.post("/login")
 async def login():
     """Simulates a user login."""
-    time.sleep(random.uniform(0.05, 0.1))
+    await asyncio.sleep(random.uniform(0.05, 0.1))
     # Simulate a small chance of login failure
     if random.random() < 0.05:
         logger.warning(f"Failed login attempt for {SERVICE_NAME}")
@@ -96,7 +104,7 @@ async def login():
 @app.get("/validate_token")
 async def validate_token():
     """Simulates token validation."""
-    time.sleep(random.uniform(0.02, 0.05))
+    await asyncio.sleep(random.uniform(0.02, 0.05))
     return {"status": "success", "user_id": "user123"}
 # --- Main execution block ---
 # This allows you to run the service directly using `python product_service/main.py`

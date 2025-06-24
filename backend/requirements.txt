@@ -2,6 +2,8 @@ fastapi
 uvicorn[standard]
 loguru
 psutil
-requests 
-google-generativeai  
-python-dotenv 
+requests
+ollama
+python-dotenv
+streamlit
+pandas

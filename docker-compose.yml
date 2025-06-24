@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # --- Backend Services ---
+
+  auth-service:
+    build: ./backend
+    command: python auth_service/main.py
+    # We no longer need to map ports for internal services
+    # ports:
+    #   - "8000:8000" 
+    volumes:
+      - ./backend/logs:/app/logs
+
+  order-service:
+    build: ./backend
+    command: python order_service/main.py
+    # ports:
+    #   - "8001:8001"
+    volumes:
+      - ./backend/logs:/app/logs
+
+  product-service:
+    build: ./backend
+    command: python product_service/main.py
+    # ports:
+    #   - "8002:8002"
+    volumes:
+      - ./backend/logs:/app/logs
+  
+  # --- NEW CONTROLLER SERVICE ---
+  controller:
+    build: ./backend
+    command: python controller.py
+    depends_on: # This ensures the services are started before the controller tries to hit them
+      - auth-service
+      - order-service
+      - product-service
+
+  monitoring-engine:
+    build: ./backend
+    command: python monitoring_engine.py
+    ports:
+      - "8008:8008" # Keep this port mapped for our browser to access the API
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/ai_summary.txt:/app/ai_summary.txt
+    depends_on: # The engine should wait for the services it monitors
+      - auth-service
+      - order-service
+      - product-service
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # ADD THIS LINE - allows Docker to reach your host machine
+
+  # --- Frontend Service ---
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - monitoring-engine

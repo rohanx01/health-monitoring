@@ -5,7 +5,8 @@ from fastapi import FastAPI, Request, HTTPException
 import uvicorn
 from loguru import logger
 import psutil
-
+import asyncio
+import sys
 # --- Configuration ---
 # Define the port for this service. Each service will have a unique port.
 PORT = 8002
@@ -20,14 +21,21 @@ os.makedirs("logs", exist_ok=True)
 
 # Remove default logger and add a new one
 logger.remove()
+os.makedirs("logs", exist_ok=True)
 logger.add(
-    f"logs/{SERVICE_NAME}.log",  # Log file path
-    serialize=True,             # This is the magic! It formats logs as JSON.
-    level="INFO",               # Minimum level to log
-    rotation="10 MB",           # Rotate file when it reaches 10 MB
-    retention="7 days"          # Keep logs for 7 days
+    f"logs/{SERVICE_NAME}.log",
+    serialize=True,
+    level="INFO",
+    rotation="10 MB",
+    retention="7 days"
 )
 
+# ALSO log to the console for live Docker logs
+logger.add(
+    sys.stdout,
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+)
 # --- FastAPI App Initialization ---
 app = FastAPI()
 
@@ -87,7 +95,7 @@ async def log_middleware(request: Request, call_next):
 async def get_product(product_id: str):
     """A simple endpoint that simulates fetching a product."""
     # Simulate some work
-    time.sleep(random.uniform(0.1, 0.3))
+    await asyncio.sleep(random.uniform(0.1, 0.3))
     return {"product_id": product_id, "name": f"Product {product_id}", "price": random.uniform(10.0, 100.0)}
 
 @app.get("/products/inventory-check")
@@ -99,7 +107,7 @@ async def check_inventory():
         raise HTTPException(status_code=500, detail="Inventory database connection failed")
     
     # Simulate some work
-    time.sleep(random.uniform(0.2, 0.5))
+    await asyncio.sleep(random.uniform(0.2, 0.5))
     return {"status": "success", "message": "Inventory is available"}
 
 # --- Main execution block ---

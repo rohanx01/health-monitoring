@@ -5,7 +5,8 @@ from fastapi import FastAPI, Request, HTTPException
 import uvicorn
 from loguru import logger
 import psutil
-
+import asyncio
+import sys
 # --- Configuration ---
 # Define the port for this service. Each service will have a unique port.
 PORT = 8001
@@ -20,14 +21,21 @@ os.makedirs("logs", exist_ok=True)
 
 # Remove default logger and add a new one
 logger.remove()
+os.makedirs("logs", exist_ok=True)
 logger.add(
-    f"logs/{SERVICE_NAME}.log",  # Log file path
-    serialize=True,             # This is the magic! It formats logs as JSON.
-    level="INFO",               # Minimum level to log
-    rotation="10 MB",           # Rotate file when it reaches 10 MB
-    retention="7 days"          # Keep logs for 7 days
+    f"logs/{SERVICE_NAME}.log",
+    serialize=True,
+    level="INFO",
+    rotation="10 MB",
+    retention="7 days"
 )
 
+# ALSO log to the console for live Docker logs
+logger.add(
+    sys.stdout,
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+)
 # --- FastAPI App Initialization ---
 app = FastAPI()
 
@@ -104,13 +112,13 @@ async def place_order():
         logger.bind(json=log_details).error(f"Payment processing failed for {SERVICE_NAME}")
         raise HTTPException(status_code=500, detail="Payment provider error")
     
-    time.sleep(random.uniform(0.3, 0.6))
+    await asyncio.sleep(random.uniform(0.3, 0.6))
     return {"status": "success", "order_id": f"ORD-{random.randint(1000, 9999)}"}
 
 @app.get("/orders/{order_id}")
 async def get_order_status(order_id: str):
     """Simulates checking an order's status."""
-    time.sleep(random.uniform(0.1, 0.2))
+    await asyncio.sleep(random.uniform(0.1, 0.2))
     return {"order_id": order_id, "status": random.choice(["processing", "shipped", "delivered"])}
 # --- Main execution block ---
 # This allows you to run the service directly using `python product_service/main.py`
