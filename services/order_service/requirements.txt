@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pymongo
+python-dotenv
+prometheus-client
+psutil
+motor
+email-validator

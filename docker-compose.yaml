@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+
+  # ======================
+  # MongoDB Database
+  # ======================
+  mongo:
+    image: mongo
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  # ======================
+  # Mongo Express UI
+  # ======================
+  mongo-express:
+    image: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_BASICAUTH=false 
+    depends_on:
+      - mongo
+
+  # ======================
+  # Main App: Auth Service
+  # ======================
+  auth_service:
+    build: ./services/auth_service
+    ports:
+      - "8001:8000"     # 8001 on host, 8000 inside container
+      - "8002:8002"     # Prometheus metrics
+    environment:
+      - MONGO_URI=mongodb://mongo:27017
+    depends_on:
+      - mongo
+
+  # ======================
+  # Order Service
+  # ======================
+  order_service:
+    build: ./services/order_service
+    ports:
+      - "8000:8000"
+      - "8003:8003"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017
+    depends_on:
+      - mongo
+
+  # ======================
+  # Prometheus Monitoring
+  # ======================
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - auth_service
+
+volumes:
+  mongo-data:
