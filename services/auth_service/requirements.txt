@@ -7,3 +7,4 @@ email-validator
 prometheus-client
 psutil
 motor
+python-jose[cryptography]

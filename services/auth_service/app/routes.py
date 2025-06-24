@@ -1,10 +1,15 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import bcrypt
 import os
 import asyncio
+from jose import jwt
+
+JWT_SECRET = os.getenv("JWT_SECRET", "mysecretkey")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_MINUTES = 60
 
 
 router = APIRouter()
@@ -40,6 +45,13 @@ class RegisterModel(BaseModel):
 class SignInModel(BaseModel):
     email: EmailStr
     password: str
+
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=JWT_EXPIRY_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 @router.post("/register")
 async def register_user(data: RegisterModel):
@@ -84,5 +96,6 @@ async def signin_user(data: SignInModel):
     except Exception:
         raise HTTPException(status_code=500, detail="Database update failed")
 
-    return {"status": "success", "msg": "Login successful"}
+    token = create_access_token({"email": data.email})
+    return {"status": "success", "access_token": token}
 
