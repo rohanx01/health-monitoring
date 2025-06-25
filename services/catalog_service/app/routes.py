@@ -1,7 +1,8 @@
+from typing import List
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
-from utils.auth import verify_token  
+from app.auth import verify_token  
 import os
 from bson import ObjectId
 
@@ -64,23 +65,28 @@ async def update_stock(data: StockUpdateModel, user=Depends(verify_token)):
     return {"status": "stock updated"}
 
 @router.post("/add_product")
-async def add_product(data: ProductCreateModel, user=Depends(verify_token)):
-    # Optional: restrict to certain users (e.g. admin only)
+async def add_products(
+    data: List[ProductCreateModel]
+):
+    # Optional: Restrict to certain users
     # if user.get("email") != "admin@example.com":
     #     raise HTTPException(status_code=403, detail="Not authorized")
 
-    product = {
-        "name": data.name,
-        "description": data.description,
-        "stock": data.stock
-    }
+    products = [
+        {
+            "name": item.name,
+            "description": item.description,
+            "stock": item.stock
+        }
+        for item in data
+    ]
 
     try:
-        result = await products_collection.insert_one(product)
+        result = await products_collection.insert_many(products)
         return {
             "status": "success",
-            "product_id": str(result.inserted_id),
-            "msg": "Product added successfully"
+            "inserted_ids": [str(pid) for pid in result.inserted_ids],
+            "msg": f"{len(result.inserted_ids)} products added"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to add product")
+        raise HTTPException(status_code=500, detail="Failed to insert products")

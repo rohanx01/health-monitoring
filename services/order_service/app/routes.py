@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
-from utils.auth import verify_token
+from app.auth import verify_token
 import os
 import httpx
 from bson import ObjectId
