@@ -8,27 +8,52 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: secret
     volumes:
       - mongo_data:/data/db
-    networks:
-      - private_net  # ✅ Reference global network
     ports:
-      - "27017:27017"  # ✅ Enables access from your host for Compass
-  
+      - "27017:27017"
+    networks:
+      - private_net
+
   auth_service:
     build: ./services/auth_service
     container_name: auth_service
     depends_on:
       - mongodb
     ports:
-      - "8000:8000"
-      - "8002:8002" # prometheus server's port
+      - "8000:8000"  # Public port
+      - "8002:8002"  # Prometheus port
+    environment:
+      - MONGO_URI=mongodb://admin:secret@mongodb:27017
+      - JWT_SECRET=mysecretkey
+    networks:
+      - private_net
+
+  order_service:
+    build: ./services/order_service
+    container_name: order_service
+    depends_on:
+      - mongodb
+      - catalog_service
+    ports:
+      - "8003:8000"  # You can change this as needed
+    environment:
+      - MONGO_URI=mongodb://admin:secret@mongodb:27017
+      - CATALOG_SERVICE_URL=http://catalog_service:8001
+      - JWT_SECRET=mysecretkey
+    networks:
+      - private_net
+
+  catalog_service:
+    build: ./services/catalog_service
+    container_name: catalog_service
+    depends_on:
+      - mongodb
+    ports:
+      - "8001:8000"
     environment:
       - MONGO_URI=mongodb://admin:secret@mongodb:27017
     networks:
-      - private_net  # ✅ Same network for internal DNS
+      - private_net
 
-  # =====================
-  # Prometheus Monitoring
-  # =====================
   prometheus:
     image: prom/prometheus
     container_name: prometheus
@@ -38,30 +63,31 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
       - auth_service
+    networks:
+      - private_net
 
-  # ===========================
-  # Monitoring API (Flask/FastAPI)
-  # ===========================
-  # monitoring_api:
-  #   build: ./monitoring_app/backend
-  #   ports:
-  #     - "7000:7000"
-  #   depends_on:
-  #     - prometheus
+# Optional:
+# monitoring_api:
+#   build: ./monitoring_app/backend
+#   ports:
+#     - "7000:7000"
+#   depends_on:
+#     - prometheus
+#   networks:
+#     - private_net
 
-  # =====================
-  # Monitoring Dashboard
-  # # =====================
-  # monitoring_ui:
-  #   build: ./monitoring_app/frontend
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - monitoring_api
+# monitoring_ui:
+#   build: ./monitoring_app/frontend
+#   ports:
+#     - "3000:3000"
+#   depends_on:
+#     - monitoring_api
+#   networks:
+#     - private_net
 
 volumes:
   mongo_data:
-  
+
 networks:
-  private_net:  # ✅ Declare the actual network here
+  private_net:
     driver: bridge

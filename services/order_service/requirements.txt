@@ -1,8 +1,11 @@
 fastapi
 uvicorn
 pymongo
+bcrypt
 python-dotenv
+email-validator
 prometheus-client
 psutil
 motor
-email-validator
+python-jose[cryptography]
+bson
