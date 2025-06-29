@@ -1,16 +1,23 @@
 import time
 import logging
-from fastapi import Request
+import json
+import os
+from datetime import datetime
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Histogram
+from .metrics import record_http_request, record_error
 
-# Optional: MongoDB logging setup
-# from pymongo import MongoClient
-# mongo_client = MongoClient("mongodb://mongo:27017")
-# metrics_db = mongo_client.monitoring
+# Ensure logs directory exists
+os.makedirs("/app/logs", exist_ok=True)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# Configure structured logging to shared log file
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+    handlers=[logging.FileHandler("/app/logs/metrics.log", mode='a'), logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 # Prometheus histogram for response time in milliseconds
 RESPONSE_TIME_HISTOGRAM = Histogram(
@@ -20,30 +27,78 @@ RESPONSE_TIME_HISTOGRAM = Histogram(
     buckets=[50, 100, 200, 300, 400, 500, 1000, float("inf")]
 )
 
-class ResponseTimeLoggerMiddleware(BaseHTTPMiddleware):
+class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
-        response = await call_next(request)
-        process_time_ms = (time.time() - start_time) * 1000  # Convert to ms
-
-        # Prometheus: Observe latency
-        RESPONSE_TIME_HISTOGRAM.labels(
-            method=request.method,
-            endpoint=request.url.path
-        ).observe(process_time_ms)
-
-        # Log to console
-        log_data = {
-            "method": request.method,
-            "path": request.url.path,
-            "status_code": response.status_code,
-            "latency_ms": round(process_time_ms, 2),
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        
+        # Extract request details
+        method = request.method
+        url = str(request.url)
+        path = request.url.path
+        query_params = dict(request.query_params)
+        client_ip = request.client.host if request.client else "unknown"
+        user_agent = request.headers.get("user-agent", "unknown")
+        
+        # Log request
+        request_log = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "level": "INFO",
+            "service": "order_service",
+            "event": "request_start",
+            "method": method,
+            "path": path,
+            "query_params": query_params,
+            "client_ip": client_ip,
+            "user_agent": user_agent,
+            "request_id": request.headers.get("x-request-id", "unknown")
         }
+        logger.info(json.dumps(request_log))
+        
+        try:
+            # Process request
+            response = await call_next(request)
+            
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Record metrics
+            record_http_request(method, path, response.status_code, duration)
 
-        logging.info(f"[Request] {log_data}")
-
-        # Optional: Save to MongoDB
-        # metrics_db.service_metrics.insert_one(log_data)
-
-        return response
+            # Log response
+            response_log = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "level": "INFO",
+                "service": "order_service",
+                "event": "request_complete",
+                "method": method,
+                "path": path,
+                "status_code": response.status_code,
+                "duration_ms": round(duration * 1000, 2),
+                "client_ip": client_ip,
+                "request_id": request.headers.get("x-request-id", "unknown")
+            }
+            logger.info(json.dumps(response_log))
+            return response
+        except Exception as e:
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Record error metrics
+            record_error("request_failed", "order_service")
+            record_http_request(method, path, 500, duration)
+            
+            # Log error
+            error_log = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "level": "ERROR",
+                "service": "order_service",
+                "event": "request_error",
+                "method": method,
+                "path": path,
+                "error": str(e),
+                "duration_ms": round(duration * 1000, 2),
+                "client_ip": client_ip,
+                "request_id": request.headers.get("x-request-id", "unknown")
+            }
+            logger.error(json.dumps(error_log))
+            raise

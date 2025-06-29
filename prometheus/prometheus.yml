@@ -7,10 +7,15 @@ scrape_configs:
       - targets: ['auth_service:8002']
         labels:
           service: 'auth'
+
   - job_name: 'order_service'
     static_configs:
-      - targets: ['order_service:8003']
+      - targets: ['order_service:8004']
         labels:
           service: 'order'
 
-  # Add more services here
+  - job_name: 'catalog_service'
+    static_configs:
+      - targets: ['catalog_service:8006']
+        labels:
+          service: 'catalog'

@@ -1,9 +1,11 @@
 fastapi
 uvicorn
-pymongo
 bcrypt
 python-dotenv
 email-validator
 prometheus-client
 psutil
-motor
+motor==3.3.1
+pymongo==4.5.0
+python-jose[cryptography]
+python-dateutil
