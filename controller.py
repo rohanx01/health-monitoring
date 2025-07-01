@@ -88,7 +88,7 @@ async def fetch_products(session: aiohttp.ClientSession, token: str):
                 log_json("ERROR", f"Exception during fetch_products after 3 attempts", error=str(e))
                 return
             await asyncio.sleep(1)
-
+            
 async def register_user(session: aiohttp.ClientSession, user: Dict) -> str:
     payload = {"email": user["email"], "password": user["password"]}
     for attempt in range(3):

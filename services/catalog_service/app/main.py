@@ -1,8 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from .routes import router
 from .middleware import LoggingMiddleware
 from .metrics import start_metrics_server
 import threading
+import logging
+import json
+from datetime import datetime
+from fastapi.exception_handlers import http_exception_handler
 
 app = FastAPI(title="Catalog Service", version="1.0.0")
 
@@ -42,3 +46,41 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     print("🛑 Catalog Service shutting down")
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler_custom(request: Request, exc: HTTPException):
+    log_data = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "level": "ERROR",
+        "service": "catalog_service",
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": exc.status_code,
+        "client_ip": request.client.host if request.client else "unknown",
+        "user_agent": request.headers.get("user-agent", "unknown"),
+        "request_id": request.headers.get("x-request-id", "unknown"),
+        "message": f"HTTPException: {exc.detail}"
+    }
+    logging.error(json.dumps(log_data))
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+    return await http_exception_handler(request, exc)
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    log_data = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "level": "ERROR",
+        "service": "catalog_service",
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": 500,
+        "client_ip": request.client.host if request.client else "unknown",
+        "user_agent": request.headers.get("user-agent", "unknown"),
+        "request_id": request.headers.get("x-request-id", "unknown"),
+        "message": f"Unhandled Exception: {str(exc)}"
+    }
+    logging.error(json.dumps(log_data))
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+    raise exc

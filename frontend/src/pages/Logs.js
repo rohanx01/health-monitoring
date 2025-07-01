@@ -110,34 +110,41 @@ const Logs = () => {
 
     // Time range filter
     if (filters.timeRange !== "all") {
-      const now = new Date();
-      let cutoffTime;
+      // Always use UTC for now and log times
+      const nowUtc = Date.now();
+      let cutoffTimeUtc;
 
       switch (filters.timeRange) {
         case "15m":
-          cutoffTime = new Date(now.getTime() - 15 * 60 * 1000);
+          cutoffTimeUtc = nowUtc - 15 * 60 * 1000;
           break;
         case "1h":
-          cutoffTime = new Date(now.getTime() - 60 * 60 * 1000);
+          cutoffTimeUtc = nowUtc - 60 * 60 * 1000;
           break;
         case "6h":
-          cutoffTime = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+          cutoffTimeUtc = nowUtc - 6 * 60 * 60 * 1000;
           break;
         case "24h":
-          cutoffTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          cutoffTimeUtc = nowUtc - 24 * 60 * 60 * 1000;
           break;
         default:
-          cutoffTime = new Date(0);
+          cutoffTimeUtc = 0;
       }
 
       filtered = filtered.filter((log) => {
-        const logTime = new Date(log.timestamp);
-        return logTime >= cutoffTime;
+        // Parse log.timestamp as UTC
+        const logTimeUtc = Date.parse(log.timestamp);
+        return logTimeUtc >= cutoffTimeUtc;
       });
     }
 
     setFilteredLogs(filtered);
   }, [logs, filters]);
+
+  // Sort filtered logs by timestamp descending (newest first)
+  const sortedFilteredLogs = filteredLogs
+    .slice()
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   // Scroll to bottom for new logs
   useEffect(() => {
@@ -436,7 +443,7 @@ const Logs = () => {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {filteredLogs.map((log, index) => (
+              {sortedFilteredLogs.map((log, index) => (
                 <div
                   key={index}
                   className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"

@@ -61,6 +61,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    volumes:
+      - ./logs:/app/logs
 
   # ======================
   # Order Service
@@ -86,6 +88,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    volumes:
+      - ./logs:/app/logs
 
   # ======================
   # Catalog Service
@@ -110,6 +114,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    volumes:
+      - ./logs:/app/logs
 
   # ======================
   # Prometheus Monitoring

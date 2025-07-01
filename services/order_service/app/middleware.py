@@ -64,10 +64,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             # Record metrics
             record_http_request(method, path, response.status_code, duration)
 
-            # Log response
+            # Log response or error
             response_log = {
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "level": "INFO",
                 "service": "order_service",
                 "event": "request_complete",
                 "method": method,
@@ -77,7 +76,18 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "client_ip": client_ip,
                 "request_id": request.headers.get("x-request-id", "unknown")
             }
-            logger.info(json.dumps(response_log))
+            if response.status_code >= 400:
+                response_log["level"] = "ERROR"
+                response_log["message"] = f"Request failed with status {response.status_code}"
+                logger.error(json.dumps(response_log))
+                for handler in logger.handlers:
+                    handler.flush()
+            else:
+                response_log["level"] = "INFO"
+                response_log["message"] = "Request processed successfully"
+                logger.info(json.dumps(response_log))
+                for handler in logger.handlers:
+                    handler.flush()
             return response
         except Exception as e:
             # Calculate duration
@@ -101,4 +111,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "request_id": request.headers.get("x-request-id", "unknown")
             }
             logger.error(json.dumps(error_log))
+            for handler in logger.handlers:
+                handler.flush()
             raise

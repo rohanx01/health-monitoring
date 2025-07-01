@@ -2,7 +2,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from fastapi.responses import JSONResponse
 import httpx
 import time
@@ -280,7 +280,8 @@ async def scrape_prometheus() -> Dict[str, Any]:
         "auth_attempts_total": "auth_attempts_total",
         "jwt_tokens_issued_total": "jwt_tokens_issued_total",
         "db_operations_total": "db_operations_total",
-        "errors_total": "errors_total"
+        "errors_total": "errors_total",
+        "process_start_time_seconds": "process_start_time_seconds"
     }
     
     try:
@@ -462,14 +463,71 @@ async def api_metrics():
         "prometheus_metrics": prometheus_metrics
     }
 
+async def ai_incident_analysis(anomaly, logs, metrics, dependencies=None):
+    """Industry-standard AI incident analysis using LLM"""
+    prompt = f"""
+You are an SRE. Analyze this incident:
+
+Anomaly: {anomaly}
+Recent logs:
+{chr(10).join([json.dumps(log) for log in logs[-20:]])}
+
+Recent metrics:
+{json.dumps(metrics, indent=2)}
+
+Service dependencies:
+{dependencies or 'N/A'}
+
+Please:
+1. Summarize the incident.
+2. Suggest the most likely root cause.
+3. Recommend immediate actions.
+4. Suggest long-term improvements.
+"""
+    if not ollama:
+        return "Ollama client not installed. Please install: pip install ollama"
+    try:
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.2}
+        )
+        return response["message"]["content"]
+    except Exception as e:
+        return f"Ollama error: {e}. Please ensure Ollama is running and llama3 model is available."
+
+@app.get("/api/ai_analysis")
+async def api_ai_analysis(
+    time_window_minutes: int = Query(15, ge=1, le=120),
+    anomaly: str = Query(None, description="Optional anomaly description")
+):
+    now = datetime.now()
+    window_start = now - timedelta(minutes=time_window_minutes)
+    logs_window = [log for log in parsed_logs if "timestamp" in log and dateutil_parser.parse(log["timestamp"]) >= window_start]
+    metrics_snapshot = metrics_summary.copy() if metrics_summary else {}
+    dependencies = "auth_service -> order_service -> catalog_service (example)"
+    ai_result = await ai_incident_analysis(anomaly or "Manual analysis requested", logs_window, metrics_snapshot, dependencies)
+    return {
+        "anomaly": anomaly or "Manual analysis requested",
+        "time_window_minutes": time_window_minutes,
+        "log_count": len(logs_window),
+        "ai_analysis": ai_result
+    }
+
 @app.get("/api/root_cause")
 async def api_root_cause():
-    if not anomaly_cache:
-        return {"root_cause": "No anomalies detected."}
-    # Use last 100 logs for context
-    logs = parsed_logs[-100:] if parsed_logs else []
-    root_cause = await ask_ollama_for_root_cause(logs, anomaly_cache)
-    return {"anomalies": anomaly_cache, "root_cause": root_cause}
+    # Always run AI analysis, even if no anomalies detected
+    now = datetime.now()
+    window_start = now - timedelta(minutes=15)
+    logs_window = [log for log in parsed_logs if "timestamp" in log and dateutil_parser.parse(log["timestamp"]) >= window_start]
+    metrics_snapshot = metrics_summary.copy() if metrics_summary else {}
+    dependencies = "auth_service -> order_service -> catalog_service (example)"
+    anomaly_text = "; ".join(anomaly_cache) if anomaly_cache else "No anomalies detected, manual analysis"
+    ai_result = await ai_incident_analysis(anomaly_text, logs_window, metrics_snapshot, dependencies)
+    return {
+        "anomalies": anomaly_cache,
+        "ai_analysis": ai_result
+    }
 
 @app.get("/api/health")
 async def api_health():
@@ -605,12 +663,63 @@ async def api_ollama_test():
             "message": "Ollama connection failed. Ensure Ollama is running and model is available."
         }
 
+def tail_log_file(path: Path, n: int) -> list:
+    """Efficiently read the last n lines from a file."""
+    with path.open('rb') as f:
+        f.seek(0, 2)
+        filesize = f.tell()
+        blocksize = 1024
+        data = b''
+        lines = []
+        while len(lines) <= n and f.tell() > 0:
+            seek_offset = min(f.tell(), blocksize)
+            f.seek(-seek_offset, 1)
+            data = f.read(seek_offset) + data
+            f.seek(-seek_offset, 1)
+            lines = data.split(b'\n')
+        # Only keep the last n lines
+        return [line.decode('utf-8', errors='replace') for line in lines[-n:] if line.strip()]
+
 @app.get("/api/logs")
-async def api_logs():
-    """Get recent logs with optional filtering"""
+async def api_logs(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(1000, ge=1, le=10000),
+    level: str = Query(None),
+    service: str = Query(None),
+    time_start: str = Query(None),
+    time_end: str = Query(None)
+):
+    """Efficiently stream and filter logs from disk with pagination and filtering."""
+    # Read last (offset+limit) lines from the log file
+    n = offset + limit
+    lines = tail_log_file(LOG_PATH, n)
+    logs = [parse_log_line(line) for line in lines]
+    logs = logs[::-1]  # Newest first
+
+    # Apply filters
+    if level:
+        logs = [log for log in logs if log.get("level", "").upper() == level.upper()]
+    if service:
+        logs = [log for log in logs if log.get("service", "").lower() == service.lower()]
+    if time_start:
+        try:
+            start_dt = dateutil_parser.parse(time_start)
+            logs = [log for log in logs if "timestamp" in log and dateutil_parser.parse(log["timestamp"]) >= start_dt]
+        except Exception:
+            pass
+    if time_end:
+        try:
+            end_dt = dateutil_parser.parse(time_end)
+            logs = [log for log in logs if "timestamp" in log and dateutil_parser.parse(log["timestamp"]) <= end_dt]
+        except Exception:
+            pass
+
+    paginated_logs = logs[offset:offset+limit]
     return {
-        "logs": parsed_logs[-1000:],  # Return last 1000 logs
-        "total": len(parsed_logs),
+        "logs": paginated_logs,
+        "total": len(logs),
+        "offset": offset,
+        "limit": limit,
         "last_updated": datetime.now().isoformat()
     }
 
@@ -640,13 +749,10 @@ async def api_services():
         errors = [log for log in logs if log.get("level") == "ERROR"]
         latencies = [log.get("latency_ms") if log.get("latency_ms") is not None else log.get("duration_ms") for log in logs if log.get("latency_ms") is not None or log.get("duration_ms") is not None]
         avg_latency = sum(latencies) / len(latencies) if latencies else None
-        # Uptime: estimate as time since earliest log for this service
-        if logs:
-            try:
-                first_log_time = min(dateutil_parser.parse(log.get("timestamp", now.isoformat())) for log in logs)
-                uptime = (now - first_log_time).total_seconds() / 60  # in minutes
-            except Exception:
-                uptime = None
+        # Uptime: use process_start_time_seconds from Prometheus
+        process_start_time = get_prom_value("process_start_time_seconds", name)
+        if process_start_time > 0:
+            uptime = (time.time() - process_start_time) / 60  # in minutes
         else:
             uptime = None
         mem = get_prom_value("memory_used_mb", name)
@@ -700,5 +806,21 @@ async def api_debug_service_log_counts():
         "log_file_size": LOG_PATH.stat().st_size if LOG_PATH.exists() else 0,
         "last_updated": datetime.now().isoformat()
     }
+
+@app.get("/api/debug/log-sample")
+async def api_debug_log_sample():
+    # Return the last 20 error logs with service and level fields
+    error_logs = [log for log in parsed_logs if log.get("level") == "ERROR"]
+    return {"error_logs": error_logs[-20:]}
+
+@app.get("/api/debug/service-error-counts")
+async def api_debug_service_error_counts():
+    # Count ERROR logs per service
+    error_counts = {}
+    for log in parsed_logs:
+        if log.get("level") == "ERROR":
+            service = log.get("service", "unknown")
+            error_counts[service] = error_counts.get(service, 0) + 1
+    return {"service_error_counts": error_counts}
 
 # --- Expandable: Add more endpoints or analysis as needed --- 
